@@ -19,7 +19,6 @@ import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.Confi
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.Configuration.DEFAULT_REFS_DB_TABLE_NAME;
 import static org.testcontainers.containers.localstack.LocalStackContainer.Service.DYNAMODB;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.gerritforge.gerrit.globalrefdb.GlobalRefDbLockException;
 import com.google.common.cache.LoadingCache;
 import com.google.gerrit.acceptance.LightweightPluginDaemonTest;
@@ -35,33 +34,49 @@ import java.util.Optional;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectIdRef;
 import org.eclipse.jgit.lib.Ref;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 @TestPlugin(
     name = "aws-dynamodb-refdb",
     sysModule = "com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.Module")
 public class DynamoDBRefDatabaseIT extends LightweightPluginDaemonTest {
-  private static final Duration DYNAMODB_TABLE_CREATION_TIMEOUT = Duration.ofSeconds(10);
-
   private static final int LOCALSTACK_PORT = 4566;
-  private static final LocalStackContainer localstack =
-      new LocalStackContainer(DockerImageName.parse("localstack/localstack:0.12.8"))
-          .withServices(DYNAMODB)
-          .withExposedPorts(LOCALSTACK_PORT);
+  private static final Duration DYNAMODB_TABLE_CREATION_TIMEOUT = Duration.ofSeconds(10);
+  private static LocalStackContainer localstack;
+
+  @BeforeClass
+  public static void setupLocalStack() {
+    System.out.println("--- Testcontainers Debug Info ---");
+    System.out.println("DOCKER_HOST (env): " + System.getenv("DOCKER_HOST"));
+    System.out.println("docker.host (prop): " + System.getProperty("docker.host"));
+    System.out.println("---------------------------------");
+
+    localstack =
+        new LocalStackContainer(DockerImageName.parse("localstack/localstack").withTag("4.9.2"))
+            .withServices(DYNAMODB)
+            .withExposedPorts(LOCALSTACK_PORT);
+    localstack.start();
+  }
+
+  @AfterClass
+  public static void tearDown() {
+    localstack.close();
+  }
 
   @Before
   @Override
   public void setUpTestPlugin() throws Exception {
-    localstack.start();
-
     System.setProperty("endpoint", localstack.getEndpointOverride(DYNAMODB).toASCIIString());
     System.setProperty("region", localstack.getRegion());
-    System.setProperty("aws.accessKeyId", localstack.getAccessKey());
+    System.setProperty("aws.accessKeyId", localstack.getSecretKey());
 
-    // The secret key property name has changed from aws-sdk 1.11.x and 2.x [1]
+    // The secret key property name has changed from aws-sdk 1.11.x and 2.x [1]z
     // Export both names so that default credential provider chains work regardless
     // he underlying library version.
     // https: // docs.aws.amazon.com/sdk-for-java/latest/migration-guide/client-credential.html
@@ -69,13 +84,6 @@ public class DynamoDBRefDatabaseIT extends LightweightPluginDaemonTest {
     System.setProperty("aws.secretAccessKey", localstack.getSecretKey());
 
     super.setUpTestPlugin();
-  }
-
-  @Override
-  public void tearDownTestPlugin() {
-    localstack.close();
-
-    super.tearDownTestPlugin();
   }
 
   @Test
@@ -276,8 +284,8 @@ public class DynamoDBRefDatabaseIT extends LightweightPluginDaemonTest {
     assertThat(dynamoDBRefDatabase().getCurrentVersion(project)).isNull();
   }
 
-  private AmazonDynamoDB dynamoDBClient() {
-    return plugin.getSysInjector().getInstance(AmazonDynamoDB.class);
+  private DynamoDbClient dynamoDBClient() {
+    return plugin.getSysInjector().getInstance(DynamoDbClient.class);
   }
 
   private DynamoDBRefDatabase dynamoDBRefDatabase() {

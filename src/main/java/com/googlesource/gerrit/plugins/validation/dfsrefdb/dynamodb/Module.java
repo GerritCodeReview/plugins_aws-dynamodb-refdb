@@ -16,13 +16,13 @@ package com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb;
 
 import static com.google.inject.Scopes.SINGLETON;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBLockClient;
 import com.gerritforge.gerrit.globalrefdb.GlobalRefDatabase;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.extensions.registration.DynamicItem;
 import com.google.gerrit.lifecycle.LifecycleModule;
 import com.google.inject.Scopes;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 class Module extends LifecycleModule {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -34,7 +34,7 @@ class Module extends LifecycleModule {
         .to(DynamoDBRefDatabase.class)
         .in(Scopes.SINGLETON);
     install(new ProjectVersionCacheModule());
-    bind(AmazonDynamoDB.class).toProvider(AmazonDynamoDBProvider.class).in(SINGLETON);
+    bind(DynamoDbClient.class).toProvider(DynamoDbClientProvider.class).in(SINGLETON);
     bind(AmazonDynamoDBLockClient.class).toProvider(DynamoDBLockClientProvider.class).in(SINGLETON);
     listener().to(DynamoDBLifeCycleManager.class);
   }

@@ -17,30 +17,31 @@ package com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb;
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.DynamoDBRefDatabase.LOCK_DB_PRIMARY_KEY;
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.DynamoDBRefDatabase.LOCK_DB_SORT_KEY;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBLockClient;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBLockClientOptions;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import java.util.concurrent.TimeUnit;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 @Singleton
 class DynamoDBLockClientProvider implements Provider<AmazonDynamoDBLockClient> {
   private final Configuration configuration;
-  private final AmazonDynamoDB dynamoDB;
+  private final DynamoDbClient dynamoDbClient;
 
   @Inject
-  DynamoDBLockClientProvider(Configuration configuration, AmazonDynamoDB dynamoDB) {
+  DynamoDBLockClientProvider(Configuration configuration, DynamoDbClient dynamoDbClient) {
     this.configuration = configuration;
-    this.dynamoDB = dynamoDB;
+    this.dynamoDbClient = dynamoDbClient;
   }
 
   @Override
   public AmazonDynamoDBLockClient get() {
     final boolean createHeartbeatBackgroundThread = true;
+
     return new AmazonDynamoDBLockClient(
-        AmazonDynamoDBLockClientOptions.builder(dynamoDB, configuration.getLocksTableName())
+        AmazonDynamoDBLockClientOptions.builder(dynamoDbClient, configuration.getLocksTableName())
             .withPartitionKeyName(LOCK_DB_PRIMARY_KEY)
             .withSortKeyName(LOCK_DB_SORT_KEY)
             .withTimeUnit(TimeUnit.SECONDS)
