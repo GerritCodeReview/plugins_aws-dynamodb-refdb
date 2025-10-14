@@ -1,99 +1,101 @@
 load("//tools/bzl:maven_jar.bzl", "maven_jar")
 
-AWS_SDK_VER = "2.16.19"
-AWS_KINESIS_VER = "2.3.4"
-JACKSON_VER = "2.10.4"
-DOCKER_JAVA_VERS = "3.2.8"
+AWS_SDK_VER = "2.35.5"
+JACKSON_VER = "2.20.0"
+DOCKER_JAVA_VERS = "3.6.0"
+LOCALSTACK_VERS = "1.21.3"
 
 def external_plugin_deps():
+    """Dependencies of the aws-dynamodb-refdb plugin"""
     maven_jar(
         name = "amazon-dynamodb",
         artifact = "software.amazon.awssdk:dynamodb:" + AWS_SDK_VER,
-        sha1 = "33ec7d291973658779b5777db2a0214a5c469e81",
-    )
-
-    maven_jar(
-        name = "aws-java-sdk-dynamodb",
-        artifact = "com.amazonaws:aws-java-sdk-dynamodb:1.11.1006",
-        sha1 = "dd2c9dff101ae8dad26197f7b09a06d4e13965ca",
+        sha1 = "d4ee5bdf62c768aca766a5730fdf228ae081fdea",
     )
 
     maven_jar(
         name = "dynamodb-lock-client",
-        artifact = "com.amazonaws:dynamodb-lock-client:1.1.0",
-        sha1 = "3aadced3599f3b2fd058bc75d48dde374f66e544",
+        artifact = "com.amazonaws:dynamodb-lock-client:1.4.0",
+        sha1 = "6aae4bc1b4eeab582e370333b2174623c62f82c7",
     )
 
     maven_jar(
         name = "amazon-regions",
         artifact = "software.amazon.awssdk:regions:" + AWS_SDK_VER,
-        sha1 = "089f4f3d3ef20b2486f09e71da638c03100eab64",
+        sha1 = "e0b90db310a950960edd8d087ded45fc65ca3be3",
+    )
+
+    maven_jar(
+        name = "amazon-sdk-auth",
+        artifact = "software.amazon.awssdk:auth:" + AWS_SDK_VER,
+        sha1 = "372b6ac4d431a00a4a6d50892eeb3ac0de1f42c2",
+    )
+
+    maven_jar(
+        name = "amazon-sdk-identity-spi",
+        artifact = "software.amazon.awssdk:identity-spi:" + AWS_SDK_VER,
+        sha1 = "59dcd09850a6483e04301f2802c32266a38ec8eb",
     )
 
     maven_jar(
         name = "amazon-sdk-core",
         artifact = "software.amazon.awssdk:sdk-core:" + AWS_SDK_VER,
-        sha1 = "02a60fd9c138048272ef8b6c80ae67491dd386a9",
+        sha1 = "7f236b027d7de63ec9c8c1ed7415d2f7773bc17f",
     )
 
     maven_jar(
         name = "amazon-aws-core",
         artifact = "software.amazon.awssdk:aws-core:" + AWS_SDK_VER,
-        sha1 = "0f50f5cf2698a0de7d2d77322cbf3fb13f76187f",
+        sha1 = "cd9b475ad185f6d65b139dc4dabfcfe88e2832f2",
     )
 
     maven_jar(
         name = "amazon-utils",
         artifact = "software.amazon.awssdk:utils:" + AWS_SDK_VER,
-        sha1 = "53edaa1f884682ac3091293eff3eb024ed0e36bb",
-    )
-
-    maven_jar(
-        name = "aws-java-sdk-core",
-        artifact = "com.amazonaws:aws-java-sdk-core:1.11.960",
-        sha1 = "18b6b2a5cb83a0e2e33a593302b5dbe0ca2ade64",
+        sha1 = "98858f72d540a4d5f679c2a2c1fb795718575761",
     )
 
     maven_jar(
         name = "jackson-databind",
         artifact = "com.fasterxml.jackson.core:jackson-databind:" + JACKSON_VER,
-        sha1 = "76e9152e93d4cf052f93a64596f633ba5b1c8ed9",
+        sha1 = "f0a5e62fbd21285e9a5498a60dccb097e1ef793b",
     )
 
     maven_jar(
         name = "jackson-dataformat-cbor",
         artifact = "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:" + JACKSON_VER,
-        sha1 = "c854bb2d46138198cb5d4aae86ef6c04b8bc1e70",
+        sha1 = "c10e9032bec62df3089ca1cbdef43a1453aca261",
     )
 
     maven_jar(
         name = "jackson-annotations",
-        artifact = "com.fasterxml.jackson.core:jackson-annotations:" + JACKSON_VER,
-        sha1 = "6ae6028aff033f194c9710ad87c224ccaadeed6c",
+        # the third part of the version number was missed in this release
+        artifact = "com.fasterxml.jackson.core:jackson-annotations:2.20",
+        sha1 = "6a5e7291ea3f2b590a7ce400adb7b3aea4d7e12c",
     )
 
     maven_jar(
         name = "jackson-core",
         artifact = "com.fasterxml.jackson.core:jackson-core:" + JACKSON_VER,
-        sha1 = "8796585e716440d6dd5128b30359932a9eb74d0d",
+        sha1 = "3c97f7fad069f7cfae639d790bd93d6a0b2dff31",
     )
 
     maven_jar(
         name = "joda-time",
-        artifact = "joda-time:joda-time:2.10.10",
-        sha1 = "29e8126e31f41e5c12b9fe3a7eb02e704c47d70b",
+        artifact = "joda-time:joda-time:2.14.0",
+        sha1 = "1fa665c1ce64a2c8c94f63fc5c1ee7bd742d2022",
     )
 
     maven_jar(
         name = "testcontainer-localstack",
-        artifact = "org.testcontainers:localstack:1.15.2",
-        sha1 = "ae3c4717bc5f37410abbb490cb46d349a77990a0",
+        artifact = "org.testcontainers:localstack:" + LOCALSTACK_VERS,
+        sha1 = "86cd23aaba16741005c794d26419a16c8470a8e1",
     )
 
     maven_jar(
         name = "testcontainers",
-        artifact = "org.testcontainers:testcontainers:1.15.3",
-        sha1 = "95c6cfde71c2209f0c29cb14e432471e0b111880",
+        artifact = "org.testcontainers:testcontainers:" + LOCALSTACK_VERS,
+        sha1 = "aa3e792d2cf4598019933c42f1cfa55bd608ce8b",
     )
 
     maven_jar(
@@ -105,13 +107,13 @@ def external_plugin_deps():
     maven_jar(
         name = "docker-java-api",
         artifact = "com.github.docker-java:docker-java-api:" + DOCKER_JAVA_VERS,
-        sha1 = "4ac22a72d546a9f3523cd4b5fabffa77c4a6ec7c",
+        sha1 = "caeb5bee6a9c07bff31f73ace576436168e2aa47",
     )
 
     maven_jar(
         name = "docker-java-transport",
         artifact = "com.github.docker-java:docker-java-transport:" + DOCKER_JAVA_VERS,
-        sha1 = "c3b5598c67d0a5e2e780bf48f520da26b9915eab",
+        sha1 = "d522c467aad17fd927e0db0130d2849a321a36aa",
     )
 
     maven_jar(
@@ -122,6 +124,6 @@ def external_plugin_deps():
 
     maven_jar(
         name = "jna",
-        artifact = "net.java.dev.jna:jna:5.5.0",
-        sha1 = "0e0845217c4907822403912ad6828d8e0b256208",
+        artifact = "net.java.dev.jna:jna:5.18.1",
+        sha1 = "b27ba04287cc4abe769642fe8318d39fc89bf937",
     )

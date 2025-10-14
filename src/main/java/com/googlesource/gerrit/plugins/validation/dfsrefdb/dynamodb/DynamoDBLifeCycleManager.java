@@ -1,51 +1,35 @@
-// Copyright (C) 2021 The Android Open Source Project
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb;
 
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.DynamoDBRefDatabase.LOCK_DB_PRIMARY_KEY;
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.DynamoDBRefDatabase.LOCK_DB_SORT_KEY;
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.DynamoDBRefDatabase.REF_DB_PRIMARY_KEY;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBLockClient;
-import com.amazonaws.services.dynamodbv2.CreateDynamoDBTableOptions;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
-import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
-import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
-import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
-import com.amazonaws.services.dynamodbv2.util.TableUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.extensions.events.LifecycleListener;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
+import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
+import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
 @Singleton
 class DynamoDBLifeCycleManager implements LifecycleListener {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private final Configuration configuration;
-  private final AmazonDynamoDB dynamoDB;
+  private final DynamoDbClient dynamoDbClient;
 
   @Inject
-  DynamoDBLifeCycleManager(Configuration configuration, AmazonDynamoDB dynamoDB) {
+  DynamoDBLifeCycleManager(Configuration configuration, DynamoDbClient dynamoDbClient) {
     this.configuration = configuration;
-    this.dynamoDB = dynamoDB;
+    this.dynamoDbClient = dynamoDbClient;
   }
 
   // TODO: it is useful to create these at start up during development
@@ -59,72 +43,110 @@ class DynamoDBLifeCycleManager implements LifecycleListener {
   }
 
   @Override
-  public void stop() {}
+  public void stop() {
+    // No-op. The dynamoDbClient lifecycle is managed by the provider.
+  }
 
   private void createLockTableIfDoesntExist() {
-    if (!tableExists(dynamoDB, configuration.getLocksTableName())) {
-      logger.atWarning().log(
-          "Attempt to create lock table '%s'", configuration.getLocksTableName());
-      AmazonDynamoDBLockClient.createLockTableInDynamoDB(
-          CreateDynamoDBTableOptions.builder(
-                  dynamoDB, new ProvisionedThroughput(10L, 10L), configuration.getLocksTableName())
-              .withPartitionKeyName(LOCK_DB_PRIMARY_KEY)
-              .withSortKeyName(LOCK_DB_SORT_KEY)
-              .build());
+    String tableName = configuration.getLocksTableName();
+    if (tableExists(dynamoDbClient, tableName)) {
+      logger.atFine().log("Lock table '%s' already exists, nothing to do.", tableName);
+      return;
+    }
 
-      try {
-        logger.atWarning().log(
-            "Wait for lock table '%s' creation", configuration.getLocksTableName());
-        TableUtils.waitUntilActive(dynamoDB, configuration.getLocksTableName());
-        logger.atWarning().log(
-            "lock table '%s' successfully created and active", configuration.getLocksTableName());
-      } catch (InterruptedException e) {
-        logger.atSevere().withCause(e).log(
-            "Timeout when creating lock table '%s'", configuration.getLocksTableName());
+    logger.atInfo().log("Attempting to create lock table '%s'", tableName);
+    try {
+      CreateTableRequest request =
+          CreateTableRequest.builder()
+              .tableName(tableName)
+              .attributeDefinitions(
+                  AttributeDefinition.builder()
+                      .attributeName(LOCK_DB_PRIMARY_KEY)
+                      .attributeType(ScalarAttributeType.S)
+                      .build(),
+                  AttributeDefinition.builder()
+                      .attributeName(LOCK_DB_SORT_KEY)
+                      .attributeType(ScalarAttributeType.S)
+                      .build())
+              .keySchema(
+                  KeySchemaElement.builder()
+                      .attributeName(LOCK_DB_PRIMARY_KEY)
+                      .keyType(KeyType.HASH)
+                      .build(),
+                  KeySchemaElement.builder()
+                      .attributeName(LOCK_DB_SORT_KEY)
+                      .keyType(KeyType.RANGE)
+                      .build())
+              .provisionedThroughput(
+                  ProvisionedThroughput.builder()
+                      .readCapacityUnits(10L)
+                      .writeCapacityUnits(10L)
+                      .build())
+              .build();
+
+      dynamoDbClient.createTable(request);
+
+      // Use a waiter to block until the table is active.
+      try (DynamoDbWaiter waiter = dynamoDbClient.waiter()) {
+        logger.atInfo().log("Waiting for lock table '%s' to become active...", tableName);
+        waiter.waitUntilTableExists(DescribeTableRequest.builder().tableName(tableName).build());
+        logger.atInfo().log("Lock table '%s' successfully created and active.", tableName);
       }
-    } else {
-      logger.atWarning().log(
-          "Lock table '%s' already exists, nothing to do.", configuration.getLocksTableName());
+    } catch (Exception e) {
+      // Catching a broad exception as waiter can throw different things.
+      logger.atSevere().withCause(e).log("Failed to create or wait for lock table '%s'", tableName);
     }
   }
 
   private void createRefsDbTableIfDoesntExist() {
-    boolean created =
-        TableUtils.createTableIfNotExists(
-            dynamoDB,
-            new CreateTableRequest()
-                .withTableName(configuration.getRefsDbTableName())
-                .withAttributeDefinitions(
-                    new AttributeDefinition(REF_DB_PRIMARY_KEY, ScalarAttributeType.S))
-                .withKeySchema(new KeySchemaElement(REF_DB_PRIMARY_KEY, KeyType.HASH))
-                .withProvisionedThroughput(new ProvisionedThroughput(10L, 10L)));
+    String tableName = configuration.getRefsDbTableName();
+    if (tableExists(dynamoDbClient, tableName)) {
+      logger.atFine().log("RefsDb table '%s' already exists, nothing to do.", tableName);
+      return;
+    }
 
-    if (created) {
-      try {
-        logger.atWarning().log(
-            "Wait for refsDB table '%s' creation", configuration.getRefsDbTableName());
-        TableUtils.waitUntilActive(dynamoDB, configuration.getRefsDbTableName());
-        logger.atWarning().log(
-            "refsDb table '%s' successfully created and active",
-            configuration.getRefsDbTableName());
-      } catch (InterruptedException e) {
-        logger.atSevere().withCause(e).log(
-            "Timeout when creating refsDb table '%s'", configuration.getRefsDbTableName());
+    logger.atInfo().log("Attempting to create refsDb table '%s'", tableName);
+    try {
+      CreateTableRequest request =
+          CreateTableRequest.builder()
+              .tableName(tableName)
+              .attributeDefinitions(
+                  AttributeDefinition.builder()
+                      .attributeName(REF_DB_PRIMARY_KEY)
+                      .attributeType(ScalarAttributeType.S)
+                      .build())
+              .keySchema(
+                  KeySchemaElement.builder()
+                      .attributeName(REF_DB_PRIMARY_KEY)
+                      .keyType(KeyType.HASH)
+                      .build())
+              .provisionedThroughput(
+                  ProvisionedThroughput.builder()
+                      .readCapacityUnits(10L)
+                      .writeCapacityUnits(10L)
+                      .build())
+              .build();
+
+      dynamoDbClient.createTable(request);
+
+      try (DynamoDbWaiter waiter = dynamoDbClient.waiter()) {
+        logger.atInfo().log("Waiting for refsDb table '%s' to become active...", tableName);
+        waiter.waitUntilTableExists(DescribeTableRequest.builder().tableName(tableName).build());
+        logger.atInfo().log("RefsDb table '%s' successfully created and active.", tableName);
       }
-    } else {
-      logger.atWarning().log(
-          "RefsDb table '%s' already exists, nothing to do.", configuration.getRefsDbTableName());
+    } catch (Exception e) {
+      logger.atSevere().withCause(e).log(
+          "Failed to create or wait for refsDb table '%s'", tableName);
     }
   }
 
   @VisibleForTesting
-  static boolean tableExists(AmazonDynamoDB dynamoDB, String tableName) {
-    final Table table = new Table(dynamoDB, tableName);
+  static boolean tableExists(DynamoDbClient dynamoDbClient, String tableName) {
     try {
-      table.describe();
+      dynamoDbClient.describeTable(DescribeTableRequest.builder().tableName(tableName).build());
+      return true;
     } catch (ResourceNotFoundException e) {
       return false;
     }
-    return true;
   }
 }

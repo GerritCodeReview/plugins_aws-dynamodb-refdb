@@ -17,22 +17,14 @@ package com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb;
 import static com.googlesource.gerrit.plugins.validation.dfsrefdb.dynamodb.ProjectVersionCacheModule.PROJECT_VERSION_CACHE;
 
 import com.amazonaws.services.dynamodbv2.AcquireLockOptions;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBLockClient;
 import com.amazonaws.services.dynamodbv2.LockItem;
-import com.amazonaws.services.dynamodbv2.model.AttributeAction;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.AttributeValueUpdate;
-import com.amazonaws.services.dynamodbv2.model.ConditionalCheckFailedException;
-import com.amazonaws.services.dynamodbv2.model.GetItemResult;
 import com.amazonaws.services.dynamodbv2.model.LockNotGrantedException;
-import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest;
 import com.gerritforge.gerrit.globalrefdb.ExtendedGlobalRefDatabase;
 import com.gerritforge.gerrit.globalrefdb.GlobalRefDbLockException;
 import com.gerritforge.gerrit.globalrefdb.GlobalRefDbSystemError;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.flogger.FluentLogger;
 import com.google.gerrit.common.Nullable;
 import com.google.gerrit.entities.Project;
@@ -40,11 +32,19 @@ import com.google.gerrit.entities.Project.NameKey;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.name.Named;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import javax.inject.Singleton;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @Singleton
 public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
@@ -57,14 +57,14 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
 
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private final AmazonDynamoDBLockClient lockClient;
-  private final AmazonDynamoDB dynamoDBClient;
+  private final DynamoDbClient dynamoDBClient;
   private final Configuration configuration;
   private final LoadingCache<String, Optional<Integer>> projectVersionCache;
 
   @Inject
   DynamoDBRefDatabase(
       AmazonDynamoDBLockClient lockClient,
-      AmazonDynamoDB dynamoDBClient,
+      DynamoDbClient dynamoDBClient,
       Configuration configuration,
       @Named(PROJECT_VERSION_CACHE) LoadingCache<String, Optional<Integer>> projectVersionCache) {
     this.lockClient = lockClient;
@@ -88,12 +88,12 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
   @Override
   public boolean isUpToDate(Project.NameKey project, Ref ref) throws GlobalRefDbLockException {
     try {
-      GetItemResult result = getItemFromDynamoDB(pathFor(project, ref.getName()));
-      if (!exists(result)) {
+      GetItemResponse response = getItemFromDynamoDB(pathFor(project, ref.getName()));
+      if (!response.hasItem()) {
         return true;
       }
 
-      String valueInDynamoDB = result.getItem().get(REF_DB_VALUE_KEY).getS();
+      String valueInDynamoDB = response.item().get(REF_DB_VALUE_KEY).s();
       ObjectId objectIdInSharedRefDb = ObjectId.fromString(valueInDynamoDB);
       boolean isUpToDate = objectIdInSharedRefDb.equals(ref.getObjectId());
 
@@ -134,19 +134,22 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
   private boolean doCompareAndPut(
       Project.NameKey project, String refPath, String currValueForPath, String newValueForPath)
       throws GlobalRefDbSystemError {
+    Map<String, AttributeValue> key = getKey(refPath);
+    Map<String, AttributeValue> expressionAttributeValues =
+        Map.of(
+            ":old_value", AttributeValue.builder().s(currValueForPath).build(),
+            ":new_value", AttributeValue.builder().s(newValueForPath).build());
     UpdateItemRequest updateItemRequest =
-        new UpdateItemRequest()
-            .withTableName(configuration.getRefsDbTableName())
-            .withKey(ImmutableMap.of(REF_DB_PRIMARY_KEY, new AttributeValue(refPath)))
-            .withExpressionAttributeValues(
-                ImmutableMap.of(
-                    ":old_value", new AttributeValue(currValueForPath),
-                    ":new_value", new AttributeValue(newValueForPath)))
-            .withUpdateExpression(String.format("SET %s = %s", REF_DB_VALUE_KEY, ":new_value"))
-            .withConditionExpression(
+        UpdateItemRequest.builder()
+            .tableName(configuration.getRefsDbTableName())
+            .key(key)
+            .expressionAttributeValues(expressionAttributeValues)
+            .updateExpression(String.format("SET %s = :new_value", REF_DB_VALUE_KEY))
+            .conditionExpression(
                 String.format(
                     "attribute_not_exists(%s) OR %s = :old_value",
-                    REF_DB_PRIMARY_KEY, REF_DB_VALUE_KEY));
+                    REF_DB_PRIMARY_KEY, REF_DB_VALUE_KEY))
+            .build();
     try {
       dynamoDBClient.updateItem(updateItemRequest);
       logger.atFine().log(
@@ -158,7 +161,7 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
           "Conditional Check Failure when updating refPath %s. expected: %s New: %s",
           refPath, currValueForPath, newValueForPath);
       return false;
-    } catch (Exception e) {
+    } catch (SdkException e) {
       throw new GlobalRefDbSystemError(
           String.format(
               "Error updating refPath %s. expected: %s new: %s",
@@ -175,16 +178,21 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
   public <T> void doPut(NameKey project, String refPath, T value) throws GlobalRefDbSystemError {
     String refValue =
         Optional.ofNullable(value).map(Object::toString).orElse(ObjectId.zeroId().getName());
+    Map<String, AttributeValue> key = getKey(refPath);
+    Map<String, AttributeValue> expressionAttributeValues =
+        Map.of(":val", AttributeValue.builder().s(refValue).build());
+    UpdateItemRequest request =
+        UpdateItemRequest.builder()
+            .tableName(configuration.getRefsDbTableName())
+            .key(key)
+            .updateExpression(String.format("SET %s = :val", REF_DB_VALUE_KEY))
+            .expressionAttributeValues(expressionAttributeValues)
+            .build();
     try {
-      dynamoDBClient.updateItem(
-          configuration.getRefsDbTableName(),
-          ImmutableMap.of(REF_DB_PRIMARY_KEY, new AttributeValue(refPath)),
-          ImmutableMap.of(
-              REF_DB_VALUE_KEY,
-              new AttributeValueUpdate(new AttributeValue(refValue), AttributeAction.PUT)));
+      dynamoDBClient.updateItem(request);
       logger.atFine().log(
           "Updated path for project %s, path %s, value: %s", project.get(), refPath, refValue);
-    } catch (Exception e) {
+    } catch (SdkException e) {
       throw new GlobalRefDbSystemError(
           String.format(
               "Error updating path for project %s, path %s. value: %s",
@@ -258,11 +266,11 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
   public <T> Optional<T> get(Project.NameKey project, String refName, Class<T> clazz)
       throws GlobalRefDbSystemError {
     try {
-      GetItemResult item = getItemFromDynamoDB(pathFor(project, refName));
-      if (!exists(item)) {
+      GetItemResponse reponse = getItemFromDynamoDB(pathFor(project, refName));
+      if (!reponse.hasItem()) {
         return Optional.empty();
       }
-      String refValue = item.getItem().get(REF_DB_VALUE_KEY).getS();
+      String refValue = reponse.item().get(REF_DB_VALUE_KEY).s();
 
       // TODO: not every string might be cast to T (it should work now because the
       // only usage of this function requests string, but we should be serializing
@@ -274,19 +282,27 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
     }
   }
 
-  private GetItemResult getItemFromDynamoDB(String refPath) {
+  private GetItemResponse getItemFromDynamoDB(String refPath) {
     return getItemFromDynamoDB(refPath, true);
   }
 
-  public GetItemResult getItemFromDynamoDB(String refPath, Boolean consistentRead) {
-    return dynamoDBClient.getItem(
-        configuration.getRefsDbTableName(),
-        ImmutableMap.of(REF_DB_PRIMARY_KEY, new AttributeValue(refPath)),
-        consistentRead);
+  public GetItemResponse getItemFromDynamoDB(String refPath, Boolean consistentRead) {
+    Map<String, AttributeValue> key = getKey(refPath);
+    GetItemRequest request =
+        GetItemRequest.builder()
+            .tableName(configuration.getRefsDbTableName())
+            .key(key)
+            .consistentRead(consistentRead)
+            .build();
+    return dynamoDBClient.getItem(request);
   }
 
-  public boolean exists(GetItemResult result) {
-    return result.getItem() != null && !result.getItem().isEmpty();
+  public Map<String, AttributeValue> getKey(String refPath) {
+    return Map.of(REF_DB_PRIMARY_KEY, AttributeValue.builder().s(refPath).build());
+  }
+
+  public boolean exists(GetItemResponse response) {
+    return response.hasItem() && !response.item().isEmpty();
   }
 
   static class ProjectVersionCacheLoader extends CacheLoader<String, Optional<Integer>> {
@@ -300,13 +316,13 @@ public class DynamoDBRefDatabase implements ExtendedGlobalRefDatabase {
 
     @Override
     public Optional<Integer> load(String project) throws Exception {
-      GetItemResult item =
+      GetItemResponse item =
           dynamoDBRefDatabaseProvider
               .get()
               .getItemFromDynamoDB(currentVersionKey(Project.nameKey(project)), false);
       Integer currentVersion =
           dynamoDBRefDatabaseProvider.get().exists(item)
-              ? Integer.parseInt(item.getItem().get(REF_DB_VALUE_KEY).getS())
+              ? Integer.parseInt(item.item().get(REF_DB_VALUE_KEY).s())
               : null;
       return Optional.ofNullable(currentVersion);
     }
