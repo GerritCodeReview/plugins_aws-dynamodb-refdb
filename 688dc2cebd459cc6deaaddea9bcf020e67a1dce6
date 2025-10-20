@@ -24,6 +24,30 @@
       "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "828cfa16_df82bfbe",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1004034
+      },
+      "writtenOn": "2025-10-20T12:09:50Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "3fcdf887_9cb66f05",
+      "range": {
+        "startLine": 55,
+        "startChar": 0,
+        "endLine": 58,
+        "endChar": 60
+      },
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "342c4239_d05af592",
@@ -41,6 +65,24 @@
       "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "584f257e_350bce04",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 77,
+      "author": {
+        "id": 1004034
+      },
+      "writtenOn": "2025-10-20T12:09:50Z",
+      "side": 1,
+      "message": "localstack recommends to set both access key id and secret access key to the same value, it ignores the secret access key, see https://docs.localstack.cloud/aws/capabilities/config/credentials/",
+      "parentUuid": "342c4239_d05af592",
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "ec12f40a_4b60902f",
@@ -54,6 +96,30 @@
       "writtenOn": "2025-10-20T07:13:45Z",
       "side": 1,
       "message": "nit: looks like an unintended change.",
+      "range": {
+        "startLine": 79,
+        "startChar": 79,
+        "endLine": 79,
+        "endChar": 80
+      },
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c6ddf32b_de82d8f0",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1004034
+      },
+      "writtenOn": "2025-10-20T12:09:50Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "ec12f40a_4b60902f",
       "range": {
         "startLine": 79,
         "startChar": 79,
