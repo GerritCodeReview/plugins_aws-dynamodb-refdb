@@ -1,0 +1,67 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3fcdf887_9cb66f05",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1065256
+      },
+      "writtenOn": "2025-10-20T07:13:45Z",
+      "side": 1,
+      "message": "Should we move this information to use flogger logging?",
+      "range": {
+        "startLine": 55,
+        "startChar": 0,
+        "endLine": 58,
+        "endChar": 60
+      },
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "342c4239_d05af592",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 77,
+      "author": {
+        "id": 1065256
+      },
+      "writtenOn": "2025-10-20T07:13:45Z",
+      "side": 1,
+      "message": "Then we have two properties with that value. We should just remove it, I guess.",
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ec12f40a_4b60902f",
+        "filename": "src/test/java/com/googlesource/gerrit/plugins/validation/dfsrefdb/dynamodb/DynamoDBRefDatabaseIT.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1065256
+      },
+      "writtenOn": "2025-10-20T07:13:45Z",
+      "side": 1,
+      "message": "nit: looks like an unintended change.",
+      "range": {
+        "startLine": 79,
+        "startChar": 79,
+        "endLine": 79,
+        "endChar": 80
+      },
+      "revId": "688dc2cebd459cc6deaaddea9bcf020e67a1dce6",
+      "serverId": "173816e5-2b9a-37c3-8a2e-48639d4f1153"
+    }
+  ]
+}
